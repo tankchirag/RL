@@ -101,17 +101,31 @@ class PolicyIteration:
 
         return policy_stable
 
+    # def run_policy_iteration(self):
+    #     """
+    #     Run the policy iteration algorithm.
+    #     :return: Optimized policy and value function.
+    #     """
+    #     iteration = 0
+    #     while True:
+    #         print(f"Policy Iteration Step: {iteration}")
+    #         self.policy_evaluation()
+    #         if self.policy_improvement():
+    #             break
+    #         iteration += 1
+
+    #     return self.policy, self.value_function, iteration
     def run_policy_iteration(self):
         """
-        Run the policy iteration algorithm.
-        :return: Optimized policy and value function.
+        Perform Policy Iteration to find the optimal policy and value function.
+        :return: (optimal_policy, optimal_values, iterations)
         """
-        iteration = 0
+        iterations = 0
         while True:
-            print(f"Policy Iteration Step: {iteration}")
             self.policy_evaluation()
-            if self.policy_improvement():
+            stable = self.policy_improvement()
+            iterations += 1
+            if stable:
                 break
-            iteration += 1
+        return self.policy, self.value_function, iterations
 
-        return self.policy, self.value_function

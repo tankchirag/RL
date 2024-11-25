@@ -92,18 +92,56 @@ class ValueIteration:
 
         return policy
 
-    def run_value_iteration(self):
-        """
-        Run the value iteration algorithm to compute the optimal policy and value function.
-        :return: Optimized policy and value function.
-        """
-        iteration = 0
-        while True:
-            print(f"Value Iteration Step: {iteration}")
-            delta = self.value_update()
-            if delta < self.theta:
-                break
-            iteration += 1
+    # def run_value_iteration(self):
+    #     """
+    #     Run the value iteration algorithm to compute the optimal policy and value function.
+    #     :return: Optimized policy and value function.
+    #     """
+    #     iteration = 0
+    #     while True:
+    #         print(f"Value Iteration Step: {iteration}")
+    #         delta = self.value_update()
+    #         if delta < self.theta:
+    #             break
+    #         iteration += 1
 
-        optimal_policy = self.extract_policy()
-        return optimal_policy, self.value_function
+    #     optimal_policy = self.extract_policy()
+    #     return optimal_policy, self.value_function, iteration
+
+    def run_value_iteration(self, epsilon=1e-4):
+        iterations = 0  # Track iterations
+        while True:
+            delta = 0
+            for state in self.env.get_all_states():
+                if self.env.is_terminal(state):
+                    continue
+
+                max_value = float('-inf')
+                for action in self.env.actions:
+                    value = sum(
+                        prob * (reward + self.env.gamma * self.value_function[next_state])
+                        for next_state, reward, prob in self.env.get_next_states_and_rewards(state, action)
+                    )
+                    max_value = max(max_value, value)
+
+                delta = max(delta, abs(max_value - self.value_function[state]))
+                self.value_function[state] = max_value
+
+            iterations += 1  # Increment iteration count
+            if delta < epsilon:
+                break
+
+        for state in self.env.get_all_states():
+            if self.env.is_terminal(state):
+                continue
+
+            best_action = max(
+                self.env.actions,
+                key=lambda action: sum(
+                    prob * (reward + self.env.gamma * self.value_function[next_state])
+                    for next_state, reward, prob in self.env.get_next_states_and_rewards(state, action)
+                ),
+            )
+            self.policy[state] = best_action
+
+        return self.policy, self.value_function, iterations
