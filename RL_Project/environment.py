@@ -1,79 +1,64 @@
 import numpy as np
 
 class GridEnvironment:
-    """
-    Represents the grid environment for reinforcement learning with customizable rewards and actions.
-    """
-
-    def __init__(self, rows, cols, terminal_states, rewards, gamma=0.9):
+    def __init__(self, rows, cols, terminal_states, rewards, default_reward=-0.04):
         """
         Initialize the grid environment.
-
         :param rows: Number of rows in the grid.
         :param cols: Number of columns in the grid.
-        :param terminal_states: List of terminal states (row, col).
-        :param rewards: Dictionary with (row, col) as keys and rewards as values.
-        :param gamma: Discount factor.
+        :param terminal_states: List of terminal state positions (row, col).
+        :param rewards: Dictionary mapping positions (row, col) to rewards.
+        :param default_reward: Default reward for non-terminal states.
         """
         self.rows = rows
         self.cols = cols
         self.terminal_states = terminal_states
         self.rewards = rewards
-        self.gamma = gamma
-        self.actions = [
-            (-1, 0),  # North
-            (1, 0),   # South
-            (0, -1),  # West
-            (0, 1),   # East
-            (-1, 1),  # North-East
-            (-1, -1), # North-West
-            (1, 1),   # South-East
-            (1, -1)   # South-West
-        ]
+        self.default_reward = default_reward
         self.grid = self._initialize_grid()
+        self.actions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 
     def _initialize_grid(self):
-        """
-        Initialize the grid with default rewards and terminal states.
-
-        :return: The grid as a 2D numpy array.
-        """
-        grid = np.full((self.rows, self.cols), -0.04)  # Default reward
-        for state, reward in self.rewards.items():
-            grid[state] = reward
+        grid = np.full((self.rows, self.cols), self.default_reward)
+        for pos, reward in self.rewards.items():
+            grid[pos] = reward
         return grid
+
+    def get_possible_actions(self, state):
+        """
+        Get possible actions for a given state.
+        """
+        if state in self.terminal_states:
+            return []
+        return self.actions
+
+    def get_next_state(self, state, action):
+        """
+        Get the next state given a state and action.
+        :param state: Current position (row, col).
+        :param action: Chosen action.
+        """
+        deltas = {
+            'N': (-1, 0), 'NE': (-1, 1), 'E': (0, 1), 'SE': (1, 1),
+            'S': (1, 0), 'SW': (1, -1), 'W': (0, -1), 'NW': (-1, -1)
+        }
+        row, col = state
+        dr, dc = deltas[action]
+        new_row, new_col = row + dr, col + dc
+
+        # Ensure the new position is within bounds
+        if 0 <= new_row < self.rows and 0 <= new_col < self.cols:
+            return (new_row, new_col)
+        return state  # No movement if out of bounds
+
+    def get_reward(self, state):
+        """
+        Get the reward for a state.
+        """
+        return self.rewards.get(state, self.default_reward)
 
     def is_terminal(self, state):
         """
         Check if a state is terminal.
-
-        :param state: Tuple (row, col).
-        :return: True if the state is terminal, False otherwise.
         """
         return state in self.terminal_states
-
-    def get_all_states(self):
-        """
-        Get all possible states in the grid.
-
-        :return: List of (row, col) tuples.
-        """
-        return [(r, c) for r in range(self.rows) for c in range(self.cols)]
-
-    def get_next_states_and_rewards(self, state, action):
-        """
-        Get the next states, rewards, and probabilities for a given state and action.
-
-        :param state: Current state (row, col).
-        :param action: Action to perform (delta_row, delta_col).
-        :return: List of (next_state, reward, probability) tuples.
-        """
-        if self.is_terminal(state):
-            return [(state, 0, 1)]  # Terminal state stays the same
-
-        next_state = (state[0] + action[0], state[1] + action[1])
-        if not (0 <= next_state[0] < self.rows and 0 <= next_state[1] < self.cols):
-            next_state = state  # Out-of-bounds actions result in staying in place
-
-        reward = self.grid[next_state]
-        return [(next_state, reward, 1.0)]  # Single deterministic outcome

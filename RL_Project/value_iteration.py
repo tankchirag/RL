@@ -1,62 +1,68 @@
-class ValueIteration:
-    """
-    Implements the Value Iteration algorithm for policy optimization.
-    """
+import numpy as np
 
-    def __init__(self, env):
+class ValueIteration:
+    def __init__(self, env, discount_factor=0.99, theta=1e-6):
         """
         Initialize the Value Iteration algorithm.
-
-        :param env: An instance of GridEnvironment.
+        :param env: GridEnvironment instance.
+        :param discount_factor: Gamma for discounting future rewards.
+        :param theta: Convergence threshold.
         """
         self.env = env
-        self.values = {state: 0 for state in self.env.get_all_states()}
-        self.policy = {state: None for state in self.env.get_all_states()}
+        self.discount_factor = discount_factor
+        self.theta = theta
+        self.values = np.zeros((env.rows, env.cols))
 
-    def run(self, epsilon=1e-4):
+    def run_value_iteration(self, track_convergence=None):
         """
-        Run the Value Iteration algorithm.
-
-        :param epsilon: Convergence threshold.
-        :return: Tuple (policy, values, iterations).
+        Perform Value Iteration.
+        :param track_convergence: Optional list to track convergence delta.
+        :return: Optimal policy, values, and iteration count.
         """
-        iterations = 0
+        iteration = 0
         while True:
             delta = 0
-            new_values = self.values.copy()
+            for row in range(self.env.rows):
+                for col in range(self.env.cols):
+                    state = (row, col)
+                    if self.env.is_terminal(state):
+                        continue
+                    v = self.values[state]
+                    self.values[state] = max(
+                        sum(prob * (reward + self.discount_factor * self.values[next_state])
+                            for prob, next_state, reward in self._get_state_transitions(state, action))
+                        for action in self.env.get_possible_actions(state)
+                    )
+                    delta = max(delta, abs(v - self.values[state]))
+            if track_convergence is not None:
+                track_convergence.append(delta)
+            iteration += 1
+            if delta < self.theta:
+                break
+        policy = self._extract_policy()
+        return policy, self.values, iteration
 
-            for state in self.env.get_all_states():
+    def _get_state_transitions(self, state, action):
+        """
+        Get state transitions given a state and action.
+        """
+        next_state = self.env.get_next_state(state, action)
+        reward = self.env.get_reward(next_state)
+        return [(1.0, next_state, reward)]  # Deterministic
+
+    def _extract_policy(self):
+        """
+        Extract the optimal policy from value estimates.
+        """
+        policy = {}
+        for row in range(self.env.rows):
+            for col in range(self.env.cols):
+                state = (row, col)
                 if self.env.is_terminal(state):
                     continue
-
-                action_values = []
-                for action in self.env.actions:
-                    q_value = sum(
-                        prob * (reward + self.env.gamma * self.values[next_state])
-                        for next_state, reward, prob in self.env.get_next_states_and_rewards(state, action)
-                    )
-                    action_values.append(q_value)
-
-                max_value = max(action_values)
-                delta = max(delta, abs(new_values[state] - max_value))
-                new_values[state] = max_value
-
-            self.values = new_values
-            iterations += 1
-            if delta < epsilon:
-                break
-
-        # Derive policy from value function
-        for state in self.env.get_all_states():
-            if self.env.is_terminal(state):
-                continue
-
-            self.policy[state] = max(
-                self.env.actions,
-                key=lambda action: sum(
-                    prob * (reward + self.env.gamma * self.values[next_state])
-                    for next_state, reward, prob in self.env.get_next_states_and_rewards(state, action)
-                ),
-            )
-
-        return self.policy, self.values, iterations
+                policy[state] = max(
+                    (action, sum(prob * (reward + self.discount_factor * self.values[next_state])
+                                 for prob, next_state, reward in self._get_state_transitions(state, action)))
+                    for action in self.env.get_possible_actions(state)
+                )[0]
+        return policy

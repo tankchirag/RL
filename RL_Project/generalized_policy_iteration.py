@@ -1,64 +1,80 @@
+import numpy as np
+
 class GeneralizedPolicyIteration:
-    """
-    Combines Policy Iteration and Value Iteration for generalized optimization.
-    """
-
-    def __init__(self, env):
+    def __init__(self, env, discount_factor=0.99, theta=1e-6):
         """
-        Initialize the Generalized Policy Iteration algorithm.
-
-        :param env: An instance of GridEnvironment.
+        Initialize Generalized Policy Iteration.
+        :param env: GridEnvironment instance.
+        :param discount_factor: Gamma for discounting future rewards.
+        :param theta: Convergence threshold.
         """
         self.env = env
-        self.values = {state: 0 for state in self.env.get_all_states()}
-        self.policy = {state: self.env.actions[0] for state in self.env.get_all_states() if not self.env.is_terminal(state)}
+        self.discount_factor = discount_factor
+        self.theta = theta
+        self.values = np.zeros((env.rows, env.cols))
+        self.policy = {state: env.actions[0] for row in range(env.rows) for col in range(env.cols)
+                       if not env.is_terminal((row, col))}
 
-    def iterate(self, policy_eval_steps=3, epsilon=1e-4):
+    def run_gpi(self):
         """
-        Perform generalized policy iteration.
-
-        :param policy_eval_steps: Number of policy evaluation iterations.
-        :param epsilon: Convergence threshold.
-        :return: Tuple (policy, values, iterations).
+        Perform Generalized Policy Iteration.
+        :return: Optimal policy, values, and iteration count.
         """
-        iterations = 0
-
+        iteration = 0
         while True:
-            # Policy Evaluation (limited steps)
-            for _ in range(policy_eval_steps):
-                new_values = self.values.copy()
-                for state in self.env.get_all_states():
+            self._policy_evaluation()
+            is_policy_stable = self._policy_improvement()
+            iteration += 1
+            if is_policy_stable:
+                break
+        return self.policy, self.values, iteration
+
+    def _policy_evaluation(self):
+        """
+        Evaluate the current policy.
+        """
+        while True:
+            delta = 0
+            for row in range(self.env.rows):
+                for col in range(self.env.cols):
+                    state = (row, col)
                     if self.env.is_terminal(state):
                         continue
-
+                    v = self.values[state]
                     action = self.policy[state]
-                    q_value = sum(
-                        prob * (reward + self.env.gamma * self.values[next_state])
-                        for next_state, reward, prob in self.env.get_next_states_and_rewards(state, action)
+                    self.values[state] = sum(
+                        prob * (reward + self.discount_factor * self.values[next_state])
+                        for prob, next_state, reward in self._get_state_transitions(state, action)
                     )
-                    new_values[state] = q_value
-
-                self.values = new_values
-
-            # Policy Improvement
-            policy_stable = True
-            for state in self.env.get_all_states():
-                if self.env.is_terminal(state):
-                    continue
-
-                old_action = self.policy[state]
-                self.policy[state] = max(
-                    self.env.actions,
-                    key=lambda action: sum(
-                        prob * (reward + self.env.gamma * self.values[next_state])
-                        for next_state, reward, prob in self.env.get_next_states_and_rewards(state, action)
-                    ),
-                )
-                if old_action != self.policy[state]:
-                    policy_stable = False
-
-            iterations += 1
-            if policy_stable:
+                    delta = max(delta, abs(v - self.values[state]))
+            if delta < self.theta:
                 break
 
-        return self.policy, self.values, iterations
+    def _policy_improvement(self):
+        """
+        Improve the current policy.
+        :return: Whether the policy is stable.
+        """
+        policy_stable = True
+        for row in range(self.env.rows):
+            for col in range(self.env.cols):
+                state = (row, col)
+                if self.env.is_terminal(state):
+                    continue
+                old_action = self.policy[state]
+                self.policy[state] = max(
+                    (action, sum(prob * (reward + self.discount_factor * self.values[next_state])
+                                 for prob, next_state, reward in self._get_state_transitions(state, action)))
+                    for action in self.env.get_possible_actions(state)
+                )[0]
+                if old_action != self.policy[state]:
+                    policy_stable = False
+        return policy_stable
+
+    def _get_state_transitions(self, state, action):
+        """
+        Get state transitions given a state and action.
+        """
+        next_state = self.env.get_next_state(state, action)
+        reward = self.env.get_reward(next_state)
+        return [(1.0, next_state, reward)]  # Deterministic
