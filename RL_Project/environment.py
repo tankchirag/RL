@@ -1,64 +1,51 @@
 import numpy as np
 
-class GridEnvironment:
-    def __init__(self, rows, cols, terminal_states, rewards, default_reward=-0.04):
-        """
-        Initialize the grid environment.
-        :param rows: Number of rows in the grid.
-        :param cols: Number of columns in the grid.
-        :param terminal_states: List of terminal state positions (row, col).
-        :param rewards: Dictionary mapping positions (row, col) to rewards.
-        :param default_reward: Default reward for non-terminal states.
-        """
-        self.rows = rows
-        self.cols = cols
-        self.terminal_states = terminal_states
-        self.rewards = rewards
-        self.default_reward = default_reward
-        self.grid = self._initialize_grid()
-        self.actions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+class Environment:
+    def __init__(self, grid_size, goal_state, hell_state):
+        self.grid_size = grid_size
+        self.num_states = grid_size[0] * grid_size[1]
+        self.actions = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]  # N, NE, E, SE, S, SW, W, NW
+        self.goal_state = goal_state
+        self.hell_state = hell_state
+        self.transition_probs = np.zeros((self.num_states, len(self.actions), self.num_states))
+        self.rewards = np.zeros((self.num_states, len(self.actions), self.num_states))
 
-    def _initialize_grid(self):
-        grid = np.full((self.rows, self.cols), self.default_reward)
-        for pos, reward in self.rewards.items():
-            grid[pos] = reward
-        return grid
+    def _state_to_index(self, state):
+        return state[0] * self.grid_size[1] + state[1]
 
-    def get_possible_actions(self, state):
-        """
-        Get possible actions for a given state.
-        """
-        if state in self.terminal_states:
-            return []
-        return self.actions
+    def _index_to_state(self, index):
+        return (index // self.grid_size[1], index % self.grid_size[1])
 
-    def get_next_state(self, state, action):
-        """
-        Get the next state given a state and action.
-        :param state: Current position (row, col).
-        :param action: Chosen action.
-        """
-        deltas = {
-            'N': (-1, 0), 'NE': (-1, 1), 'E': (0, 1), 'SE': (1, 1),
-            'S': (1, 0), 'SW': (1, -1), 'W': (0, -1), 'NW': (-1, -1)
-        }
-        row, col = state
-        dr, dc = deltas[action]
-        new_row, new_col = row + dr, col + dc
+    def _calculate_transition_prob(self, state_idx, action_idx, next_state_idx):
+        state = self._index_to_state(state_idx)
+        next_state = self._index_to_state(next_state_idx)
+        action = self.actions[action_idx]
 
-        # Ensure the new position is within bounds
-        if 0 <= new_row < self.rows and 0 <= new_col < self.cols:
-            return (new_row, new_col)
-        return state  # No movement if out of bounds
+        expected_next_state = (state[0] + action[0], state[1] + action[1])
+        if expected_next_state == next_state:
+            if 0 <= next_state[0] < self.grid_size[0] and 0 <= next_state[1] < self.grid_size[1]:
+                return 1.0
+        return 0.0
 
-    def get_reward(self, state):
-        """
-        Get the reward for a state.
-        """
-        return self.rewards.get(state, self.default_reward)
+    def initialize_environment(self):
+        goal_index = self._state_to_index(self.goal_state)
+        hell_index = self._state_to_index(self.hell_state)
 
-    def is_terminal(self, state):
-        """
-        Check if a state is terminal.
-        """
-        return state in self.terminal_states
+        for state in range(self.num_states):
+            for action_idx in range(len(self.actions)):
+                for outcome_state in range(self.num_states):
+                    self.transition_probs[state, action_idx, outcome_state] = self._calculate_transition_prob(
+                        state, action_idx, outcome_state
+                    )
+
+        # Set terminal states
+        self.transition_probs[goal_index, :, :] = 0
+        self.transition_probs[goal_index, :, goal_index] = 1
+
+        self.transition_probs[hell_index, :, :] = 0
+        self.transition_probs[hell_index, :, hell_index] = 1
+
+        # Rewards
+        self.rewards[:, :, goal_index] = 10
+        self.rewards[:, :, hell_index] = -10
+

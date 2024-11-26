@@ -1,68 +1,37 @@
 import numpy as np
 
 class ValueIteration:
-    def __init__(self, env, discount_factor=0.99, theta=1e-6):
-        """
-        Initialize the Value Iteration algorithm.
-        :param env: GridEnvironment instance.
-        :param discount_factor: Gamma for discounting future rewards.
-        :param theta: Convergence threshold.
-        """
+    def __init__(self, env, gamma=0.99, threshold=1e-6):
         self.env = env
-        self.discount_factor = discount_factor
-        self.theta = theta
-        self.values = np.zeros((env.rows, env.cols))
+        self.gamma = gamma
+        self.threshold = threshold
+        self.values = np.zeros(env.num_states)  # Corrected to match 'num_states'
+        self.policy = np.zeros(env.num_states, dtype=int)  # Corrected to match 'num_states'
 
-    def run_value_iteration(self, track_convergence=None):
-        """
-        Perform Value Iteration.
-        :param track_convergence: Optional list to track convergence delta.
-        :return: Optimal policy, values, and iteration count.
-        """
-        iteration = 0
+    def run(self):
         while True:
-            delta = 0
-            for row in range(self.env.rows):
-                for col in range(self.env.cols):
-                    state = (row, col)
-                    if self.env.is_terminal(state):
-                        continue
-                    v = self.values[state]
-                    self.values[state] = max(
-                        sum(prob * (reward + self.discount_factor * self.values[next_state])
-                            for prob, next_state, reward in self._get_state_transitions(state, action))
-                        for action in self.env.get_possible_actions(state)
+            delta = 0  # Tracks convergence
+            new_values = np.copy(self.values)
+
+            for s in range(self.env.num_states):  # Corrected to match 'num_states'
+                action_values = []
+                for a in range(len(self.env.actions)):
+                    action_value = sum(
+                        self.env.transition_probs[s, a, s_prime] *
+                        (self.env.rewards[s, a, s_prime] + self.gamma * self.values[s_prime])
+                        for s_prime in range(self.env.num_states)
                     )
-                    delta = max(delta, abs(v - self.values[state]))
-            if track_convergence is not None:
-                track_convergence.append(delta)
-            iteration += 1
-            if delta < self.theta:
+                    action_values.append(action_value)
+
+                # Update values and determine best action
+                best_action_value = max(action_values)
+                best_action = np.argmax(action_values)
+                new_values[s] = best_action_value
+                self.policy[s] = best_action  # Update the policy
+                delta = max(delta, abs(best_action_value - self.values[s]))
+
+            self.values = new_values
+
+            # Convergence check
+            if delta < self.threshold:
                 break
-        policy = self._extract_policy()
-        return policy, self.values, iteration
-
-    def _get_state_transitions(self, state, action):
-        """
-        Get state transitions given a state and action.
-        """
-        next_state = self.env.get_next_state(state, action)
-        reward = self.env.get_reward(next_state)
-        return [(1.0, next_state, reward)]  # Deterministic
-
-    def _extract_policy(self):
-        """
-        Extract the optimal policy from value estimates.
-        """
-        policy = {}
-        for row in range(self.env.rows):
-            for col in range(self.env.cols):
-                state = (row, col)
-                if self.env.is_terminal(state):
-                    continue
-                policy[state] = max(
-                    (action, sum(prob * (reward + self.discount_factor * self.values[next_state])
-                                 for prob, next_state, reward in self._get_state_transitions(state, action)))
-                    for action in self.env.get_possible_actions(state)
-                )[0]
-        return policy
